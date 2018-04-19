@@ -9,11 +9,12 @@
 # https://github.com/dylanaraps/
 
 # Neofetch version.
-version="3.4.1-git"
+version="3.3.1-git"
 
 bash_version="${BASH_VERSION/.*}"
 sys_locale="${LANG:-C}"
 XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-${HOME}/.config}"
+old_ifs="$IFS"
 
 # Speed up script by not using unicode.
 export LC_ALL=C
@@ -22,14 +23,11 @@ export LANG=C
 # Add more paths to $PATH.
 export PATH="/usr/xpg4/bin:/usr/sbin:/sbin:/usr/etc:/usr/libexec:${PATH}"
 
-# Fix issues with gsettings.
-export GIO_EXTRA_MODULES="/usr/lib/x86_64-linux-gnu/gio/modules/"
-
 # Set no case match.
 shopt -s nocasematch
 
 # Reset colors and bold.
-reset="\e[0m"
+reset="\\e[0m"
 
 # DETECT INFORMATION
 
@@ -60,7 +58,22 @@ get_distro() {
 
     case "$os" in
         "Linux" | "BSD" | "MINIX")
-            if [[ -f "/etc/redstar-release" ]]; then
+            if [[ "$(< /proc/version)" == *"Microsoft"* ||
+                  "$kernel_version" == *"Microsoft"* ]]; then
+                case "$distro_shorthand" in
+                    "on")   distro="$(lsb_release -sir) [Windows 10]" ;;
+                    "tiny") distro="Windows 10" ;;
+                    *)      distro="$(lsb_release -sd) on Windows 10" ;;
+                esac
+
+            elif [[ "$(< /proc/version)" == *"chrome-bot"* || -f "/dev/cros_ec" ]]; then
+                case "$distro_shorthand" in
+                    "on")   distro="$(lsb_release -sir) [Chrome OS]" ;;
+                    "tiny") distro="Chrome OS" ;;
+                    *)      distro="$(lsb_release -sd) on Chrome OS" ;;
+                esac
+
+            elif [[ -f "/etc/redstar-release" ]]; then
                 case "$distro_shorthand" in
                     "on" | "tiny") distro="Red Star OS" ;;
                     *) distro="Red Star OS $(awk -F'[^0-9*]' '$0=$2' /etc/redstar-release)"
@@ -109,12 +122,6 @@ get_distro() {
             elif [[ -d "/system/app/" && -d "/system/priv-app" ]]; then
                 distro="Android $(getprop ro.build.version.release)"
 
-            # Chrome OS doesn't conform to the /etc/*-release standard.
-            # While the file is a series of variables they can't be sourced
-            # by the shell since the values aren't quoted.
-            elif [[ -f "/etc/lsb-release" && "$(< /etc/lsb-release)" == *CHROMEOS* ]]; then
-                distro="$(awk -F '=' '/NAME|VERSION/ {printf $2 " "}' /etc/lsb-release)"
-
             elif [[ -f "/etc/os-release" || \
                     -f "/usr/lib/os-release" || \
                     -f "/etc/openwrt_release" ]]; then
@@ -156,23 +163,6 @@ get_distro() {
                     [[ -f "/etc/pacbsd-release" ]] && distro="PacBSD"
                 fi
             fi
-
-            if [[ "$(< /proc/version)" == *"Microsoft"* ||
-                  "$kernel_version" == *"Microsoft"* ]]; then
-                case "$distro_shorthand" in
-                    "on")   distro+=" [Windows 10]" ;;
-                    "tiny") distro="Windows 10" ;;
-                    *)      distro+=" on Windows 10" ;;
-                esac
-
-            elif [[ "$(< /proc/version)" == *"chrome-bot"* || -f "/dev/cros_ec" ]]; then
-                case "$distro_shorthand" in
-                    "on")   distro+=" [Chrome OS]" ;;
-                    "tiny") distro="Chrome OS" ;;
-                    *)      distro+=" on Chrome OS" ;;
-                esac
-            fi
-
             distro="$(trim_quotes "$distro")"
             distro="${distro/'NAME='}"
         ;;
@@ -494,9 +484,16 @@ get_uptime() {
 }
 
 get_packages() {
+    # Remove /usr/games from $PATH.
+    # This solves issues with neofetch opening the "pacman" game.
+    local PATH=":${PATH}:"
+    local PATH="${PATH/':/usr/games:'/:}"
+    local PATH="${PATH%:}"
+    local PATH="${PATH#:}"
+
     case "$os" in
         "Linux" | "BSD" | "iPhone OS" | "Solaris")
-            type -p paclog-pkglist >/dev/null && \
+            type -p pacman >/dev/null && \
                 packages="$(pacman -Qq --color never | wc -l)"
 
             type -p dpkg >/dev/null && \
@@ -564,7 +561,7 @@ get_packages() {
                 packages="$((packages+=$(kpm --get-selections | grep -cv deinstall$)))"
 
             if type -p cave >/dev/null; then
-                package_dir=(/var/db/paludis/repositories/{cross-installed/*,installed}/data/*)
+                package_dir=(/var/db/paludis/repositories/{cross-installed,installed}/*/data/*)
                 packages="$((packages+=$(ls -d -1 "${package_dir[@]}" | wc -l)))"
             fi
 
@@ -747,29 +744,21 @@ get_wm() {
 
     if [[ "$WAYLAND_DISPLAY" ]]; then
         wm="$(ps -e | grep -m 1 -o -F \
-                           -e "arcan" \
                            -e "asc" \
-                           -e "clayland" \
-                           -e "dwc" \
                            -e "fireplace" \
-                           -e "greenfield" \
                            -e "grefsen" \
-                           -e "lipstick" \
-                           -e "maynard" \
                            -e "mazecompositor" \
+                           -e "maynard" \
                            -e "motorcar" \
-                           -e "orbital" \
                            -e "orbment" \
+                           -e "orbital" \
                            -e "perceptia" \
                            -e "rustland" \
                            -e "sway" \
-                           -e "ulubis" \
                            -e "velox" \
                            -e "wavy" \
-                           -e "way-cooler" \
-                           -e "wayfire" \
                            -e "wayhouse" \
-                           -e "westeros" \
+                           -e "way-cooler" \
                            -e "westford" \
                            -e "weston")"
 
@@ -788,7 +777,6 @@ get_wm() {
         [[ -z "$wm" ]] && \
             wm="$(ps -e | grep -m 1 -o -F \
                                -e "catwm" \
-                               -e "dwm" \
                                -e "monsterwm" \
                                -e "tinywm")"
 
@@ -1195,14 +1183,13 @@ get_cpu() {
     cpu="${cpu//Six-Core}"
     cpu="${cpu//Eight-Core}"
     cpu="${cpu//, * Compute Cores}"
-    cpu="${cpu//Core / }"
+    cpu="${cpu//Core}"
     cpu="${cpu//(\"AuthenticAMD\"*)}"
     cpu="${cpu//with Radeon * Graphics}"
     cpu="${cpu//, altivec supported}"
     cpu="${cpu//FPU*}"
     cpu="${cpu//Chip Revision*}"
     cpu="${cpu//Technologies, Inc}"
-    cpu="${cpu//Core2/Core 2}"
 
     # Trim spaces from core and speed output
     cores="${cores//[[:space:]]}"
@@ -1289,26 +1276,19 @@ get_gpu() {
     case "$os" in
         "Linux")
             # Read GPUs into array.
-            gpu_cmd="$(lspci -mm | awk -F '\\"|\\" \\"|\\(' \
-                                          '/"Display|"3D|"VGA/ {a[$0] = $3 " " $4} END{for(i in a)
-                                           {if(!seen[a[i]]++) print a[i]}}')"
-            IFS=$'\n' read -d "" -ra gpus <<< "$gpu_cmd"
+            IFS=$'\n'
+            gpus=($(lspci -mm | awk -F '\\"|\\" \\"|\\(' \
+                                       '/"Display|"3D|"VGA/ {a[$0] = $3 " " $4} END{for(i in a)
+                                        {if(!seen[a[i]]++) print a[i]}}'))
+            IFS="$old_ifs"
 
-            # Remove duplicate Intel Graphics outputs.
-            # This fixes cases where the outputs are both
-            # Intel but not entirely identical.
-            #
-            # Checking the first two array elements should
-            # be safe since there won't be 2 intel outputs if
-            # there's a dedicated GPU in play.
-            [[ "${gpus[0]}" == *Intel* && \
-               "${gpus[1]}" == *Intel* ]] && \
-               unset -v "gpus[0]"
+            # Number the GPUs if more than one exists.
+            ((${#gpus[@]} > 1)) && gpu_num=1
 
             for gpu in "${gpus[@]}"; do
                 # GPU shorthand tests.
-                [[ "$gpu_type" == "dedicated" && "$gpu" == *Intel* ]] || \
-                [[ "$gpu_type" == "integrated" && ! "$gpu" == *Intel* ]] && \
+                [[ "$gpu_type" == "dedicated" && "$gpu" =~ (i|I)ntel ]] ||\
+                [[ "$gpu_type" == "integrated" && ! "$gpu" =~ (i|I)ntel ]] && \
                     { unset -v gpu; continue; }
 
                 case "$gpu" in
@@ -1337,7 +1317,6 @@ get_gpu() {
                         gpu="${gpu/'(R)'}"
                         gpu="${gpu/'Corporation'}"
                         gpu="${gpu/ \(*}"
-                        gpu="${gpu/Integrated Graphics Controller}"
 
                         [[ -z "$(trim "$gpu")" ]] && gpu="Intel Integrated Graphics"
                     ;;
@@ -1354,6 +1333,7 @@ get_gpu() {
                 fi
 
                 prin "${subtitle:+${subtitle}${gpu_name}}" "$gpu"
+                ((++gpu_num))
             done
 
             return
@@ -1519,8 +1499,7 @@ get_memory() {
         ;;
 
         "AIX")
-            IFS=$'\n'"| " read -d "" -ra mem_stat <<< "$(svmon -G -O unit=MB)"
-
+            mem_stat=($(svmon -G -O unit=MB))
             mem_total="${mem_stat[11]/.*}"
             mem_free="${mem_stat[16]/.*}"
             mem_used="$((mem_total - mem_free))"
@@ -1528,9 +1507,7 @@ get_memory() {
         ;;
 
         "IRIX")
-            IFS=$'\n' read -d "" -ra mem_cmd <<< "$(pmem)"
-            IFS=" " read -ra mem_stat <<< "${mem_cmd[0]}"
-
+            mem_stat=($(pmem | head -1))
             mem_total="$((mem_stat[3] / 1024))"
             mem_free="$((mem_stat[5] / 1024))"
             mem_used="$((mem_total - mem_free))"
@@ -1587,9 +1564,6 @@ get_song() {
                            -e "tomahawk" \
                            -e "xmms2d" \
                            -e "yarock")"
-
-    [[ "$music_player" && "$music_player" != "auto" ]] && \
-        player="$music_player"
 
     get_song_dbus() {
         # Multiple players use an almost identical dbus command to get the information.
@@ -2097,26 +2071,6 @@ END
             term_font="$(trim_quotes "$term_font")"
         ;;
 
-        "kitty"*)
-            if [[ -f "${KITTY_CONFIG_DIRECTORY}/kitty/kitty.conf" ]]; then
-                kitty_file="${KITTY_CONFIG_DIRECTORY}/kitty/kitty.conf"
-
-            elif [[ -f "${XDG_CONFIG_HOME}/kitty/kitty.conf" ]]; then
-                kitty_file="${XDG_CONFIG_HOME}/kitty/kitty.conf"
-
-            elif [[ -f "${HOME}/.config/kitty/kitty.conf" ]]; then
-                kitty_file="${HOME}/.config/kitty/kitty.conf"
-
-            elif [[ -f "${HOME}/Library/Preferences/kitty/kitty.conf" ]]; then
-                kitty_file="${HOME}/Library/Preferences/kitty/kitty.conf"
-
-            fi
-
-            term_font="$(awk '/font_family/ { $1 = ""; gsub(/^[[:space:]]/, ""); font = $0 } \
-                         /\s?font_size\s/ { size = $2 } END { print font " " size}' \
-                         "${kitty_file}")"
-        ;;
-
         "konsole"*)
             # Get Process ID of current konsole window / tab
             child="$(get_ppid "$$")"
@@ -2198,35 +2152,6 @@ END
                          "${XDG_CONFIG_HOME}/sakura/sakura.conf")"
         ;;
 
-        "st")
-            term_font="$(ps -o command= -p "$parent" | grep -F -- "-f")"
-
-            if [[ "$term_font" ]]; then
-                term_font="${term_font/*-f/}"
-                term_font="${term_font/ -*/}"
-
-            else
-                # On Linux we can get the exact path to the running binary through the procfs
-                # (in case `st` is launched from outside of $PATH) on other systems we just
-                # have to guess and assume `st` is invoked from somewhere in the users $PATH
-                [[ -L /proc/$parent/exe ]] && binary="/proc/$parent/exe" || binary="$(type -p st)"
-
-                # Grep the output of strings on the `st` binary for anything that looks vaguely
-                # like a font definition. NOTE: There is a slight limitation in this approach.
-                # Technically "Font Name" is a valid font. As it doesn't specify any font options
-                # though it is hard to match it correctly amongst the rest of the noise.
-                [[ -n "$binary" ]] && \
-                    term_font="$(strings "$binary" | grep -F -m 1 \
-                                                          -e "pixelsize=" \
-                                                          -e "size=" \
-                                                          -e "antialias=" \
-                                                          -e "autohint=")"
-            fi
-
-            term_font="${term_font/xft:}"
-            term_font="${term_font/:*}"
-        ;;
-
         "terminology")
             term_font="$(strings "${XDG_CONFIG_HOME}/terminology/config/standard/base.cfg" |\
                          awk '/^font\.name$/{print a}{a=$0}')"
@@ -2243,23 +2168,11 @@ END
         ;;
 
         "urxvt" | "urxvtd" | "rxvt-unicode" | "xterm")
-            xrdb="$(xrdb -query)"
-            term_font="$(grep -i "${term/d}\**\.*font" <<< "$xrdb")"
+            term_font="$(grep -i "${term/d}\**\.*font" < <(xrdb -query))"
             term_font="${term_font/*"*font:"}"
             term_font="${term_font/*".font:"}"
             term_font="${term_font/*"*.font:"}"
             term_font="$(trim "$term_font")"
-
-            if [[ -z "$term_font" && "$term" == "xterm" ]]; then
-                term_font="$(grep -E '^XTerm.vt100.faceName' <<< "$xrdb")"
-                term_font="${term_font/*"faceName:"}"
-            fi
-
-            # xft: isn't required at the beginning so we prepend it if it's missing
-            if [[ "${term_font:0:1}" != "-" && \
-                  "${term_font:0:4}" != "xft:" ]]; then
-                term_font="xft:$term_font"
-            fi
 
             # Xresources has two different font formats, this checks which
             # one is in use and formats it accordingly.
@@ -2306,8 +2219,10 @@ get_disk() {
 
     # Create an array called 'disks' where each element is a separate line from
     # df's output. We then unset the first element which removes the column titles.
-    IFS=$'\n' read -d "" -ra disks <<< "$(df "${df_flags[@]}" "${disk_show[@]:-/}")"
-    unset "disks[0]"
+    IFS=$'\n'
+    disks=($(df "${df_flags[@]}" "${disk_show[@]:-/}"))
+    unset 'disks[0]'
+    IFS="$old_ifs"
 
     # Stop here if 'df' fails to print disk info.
     if [[ -z "${disks[*]}" ]]; then
@@ -2317,7 +2232,7 @@ get_disk() {
 
     for disk in "${disks[@]}"; do
         # Create a second array and make each element split at whitespace this time.
-        IFS=" " read -ra disk_info <<< "$disk"
+        disk_info=($disk)
         disk_perc="${disk_info[4]/'%'}"
 
         case "$df_version" in
@@ -2537,7 +2452,7 @@ get_install_date() {
 
     install_date="${install_date//-/ }"
     install_date="${install_date%:*}"
-    IFS=" " read -ra install_date <<< "$install_date"
+    install_date=($install_date)
     install_date="$(convert_time "${install_date[@]}")"
 }
 
@@ -2578,13 +2493,29 @@ get_cols() {
         end="${block_range[1]}"
 
         # Generate the string.
-        for ((start; start<=end; start++)); do
-            case "$start" in
-                [0-6]) blocks+="${reset}\e[3${start}m\e[4${start}m${block_width}" ;;
-                7) blocks+="${reset}\e[3${start}m\e[4${start}m${block_width}" ;;
-                *) blocks2+="\e[38;5;${start}m\e[48;5;${start}m${block_width}" ;;
-            esac
-        done
+        blocks+="${reset}\\e[3${start}m\\e[4${bcolor0}m${block_width}" 
+        blocks2+="\\e[38;5;${start}m\\e[48;5;${bcolor8}m${block_width}" 
+
+        blocks+="${reset}\\e[3${start}m\\e[4${bcolor1}m${block_width}" 
+        blocks2+="\\e[38;5;${start}m\\e[48;5;${bcolor9}m${block_width}" 
+
+        blocks+="${reset}\\e[3${start}m\\e[4${bcolor2}m${block_width}" 
+        blocks2+="\\e[38;5;${start}m\\e[48;5;${bcolor10}m${block_width}" 
+
+        blocks+="${reset}\\e[3${start}m\\e[4${bcolor3}m${block_width}" 
+        blocks2+="\\e[38;5;${start}m\\e[48;5;${bcolor11}m${block_width}" 
+
+        blocks+="${reset}\\e[3${start}m\\e[4${bcolor4}m${block_width}" 
+        blocks2+="\\e[38;5;${start}m\\e[48;5;${bcolor12}m${block_width}" 
+
+        blocks+="${reset}\\e[3${start}m\\e[4${bcolor5}m${block_width}" 
+        blocks2+="\\e[38;5;${start}m\\e[48;5;${bcolor13}m${block_width}" 
+
+        blocks+="${reset}\\e[3${start}m\\e[4${bcolor6}m${block_width}" 
+        blocks2+="\\e[38;5;${start}m\\e[48;5;${bcolor14}m${block_width}" 
+
+        blocks+="${reset}\\e[3${start}m\\e[4${bcolor7}m${block_width}" 
+        blocks2+="\\e[38;5;${start}m\\e[48;5;${bcolor15}m${block_width}" 
 
         # Convert height into spaces.
         printf -v block_spaces "%${block_height}s"
@@ -2595,12 +2526,12 @@ get_cols() {
 
         # Add newlines to the string.
         cols="${cols%%'nl'}"
-        cols="${cols//nl/\\n\\e[${text_padding}C${zws}}"
+        cols="${cols//nl/\\n\\\e[${text_padding}C${zws}}"
 
         # Add block height to info height.
         info_height="$((info_height+=block_height+2))"
 
-        printf "%b\n" "\e[${text_padding}C${zws}${cols}"
+        printf "%b\n" "\\e[${text_padding}C${zws}${cols}"
     fi
 
     unset -v blocks blocks2 cols
@@ -2608,7 +2539,7 @@ get_cols() {
     # TosWin2 on FreeMiNT is terrible at this,
     # so we'll reset colors arbitrarily.
     [[ "$term" == "TosWin2" ]] && \
-        printf "%b\n" "\e[30;47m"
+        printf "%b\n" "\\e[30;47m"
 
     # Tell info() that we printed manually.
     prin=1
@@ -2662,7 +2593,7 @@ image_backend() {
     esac
 
     # Set cursor position next image/ascii.
-    [[ "$image_backend" != "off" ]] && printf "%b" "\e[${lines:-0}A\e[9999999D"
+    [[ "$image_backend" != "off" ]] && printf "%b" "\\e[${lines:-0}A\\e[9999999D"
 }
 
 get_ascii() {
@@ -2700,9 +2631,6 @@ get_ascii() {
         print+="$line \n"
 
         # Calculate size of ascii file in line length / line count.
-        line="${line//[??;?;??m}"
-        line="${line//[??;?;???m}"
-        line="${line//[0m}"
         line="${line//\$\{??\}}"
         line="${line//\\\\/\\}"
         ((${#line} > ascii_length)) && ascii_length="${#line}"
@@ -2781,11 +2709,6 @@ END
             # Get DE if user has disabled the function.
             ((de_run != 1)) && get_de
 
-            if type -p wal >/dev/null && [[ -f "${HOME}/.cache/wal/wal" ]]; then
-               image="$(< "${HOME}/.cache/wal/wal")"
-               return
-            fi
-
             case "$de" in
                 "MATE"*) image="$(gsettings get org.mate.background picture-filename)" ;;
                 "Xfce"*)
@@ -2861,14 +2784,14 @@ get_term_size() {
     # so we have to use a slightly different sequence to
     # get the terminal size.
     if [[ -n "$TMUX" ]]; then
-        printf "%b" "\ePtmux;\e\e[14t\e\e[c\e\\"
+        printf "%b" "\\ePtmux;\\e\\e[14t\\e\\e[c\\e\\"
         read_flags=(-d c)
 
     elif [[ "$image_backend" == "tycat" ]]; then
-        printf "%b" "\e}qs\000"
+        printf "%b" "\\e}qs\000"
 
     else
-        printf "%b" "\e[14t\e[c"
+        printf "%b" "\\e[14t\\e[c"
         read_flags=(-d c)
     fi
 
@@ -2887,7 +2810,7 @@ get_term_size() {
         term_width="${term_size[2]/t*}"
     fi
 
-    # Get terminal width/height if \e[14t is unsupported.
+    # Get terminal width/height if \\e[14t is unsupported.
     if [[ -z "$term_width" ]] || (( "$term_width" < 50 )); then
         if type -p xdotool >/dev/null 2>&1; then
             current_window="$(xdotool getactivewindow)"
@@ -3057,7 +2980,7 @@ display_image() {
         ;;
 
         "catimg")
-            catimg -w "$((width * 2 / font_width))" "$image" ||\
+            catimg -w "$((width * 2 / font_width))" -r 0 "$image" ||\
                 to_off "Image: catimg failed to display the image."
         ;;
 
@@ -3085,10 +3008,10 @@ display_image() {
 
         "iterm2")
             image="$(base64 < "$image")"
-            iterm_cmd="\e]1337;File=width=${width}px;height=${height}px;inline=1:${image}"
+            iterm_cmd="\\e]1337;File=width=${width}px;height=${height}px;inline=1:${image}"
 
             # Tmux requires an additional escape sequence for this to work.
-            [[ -n "$TMUX" ]] && iterm_cmd="\ePtmux;\e${iterm_cmd}\e\\"
+            [[ -n "$TMUX" ]] && iterm_cmd="\\ePtmux;\\e${iterm_cmd}\\e\\"
 
             printf "%b\a\n" "$iterm_cmd"
         ;;
@@ -3124,7 +3047,7 @@ to_ascii() {
     get_ascii
 
     # Set cursor position next image/ascii.
-    printf "%b" "\e[${lines:-0}A\e[9999999D"
+    printf "%b" "\\e[${lines:-0}A\\e[9999999D"
 }
 
 to_off() {
@@ -3201,7 +3124,7 @@ scrot_program() {
     # falling back to OS specific screenshot tools.
     if [[ -n "$DISPLAY" ]]; then
         if [[ "$scrot_cmd" != "auto" ]] && type -p "${scrot_cmd%% *}" >/dev/null; then
-            IFS=" " read -ra scrot_program <<< "$scrot_cmd"
+            scrot_program=($scrot_cmd)
 
         elif type -p maim >/dev/null; then
             scrot_program=(maim)
@@ -3284,7 +3207,7 @@ prin() {
         string="${2:-$1}"
         local subtitle_color="$info_color"
     fi
-    string="$(trim "${string//$'\e[0m'}")"
+    string="$(trim "${string//$'\\e[0m'}")"
 
     # Log length if it doesn't exist.
     if [[ -z "$length" ]]; then
@@ -3297,7 +3220,7 @@ prin() {
     string="${subtitle_color}${bold}${string}"
 
     # Print the info.
-    printf "%b\n" "${text_padding:+\e[${text_padding}C}${zws}${string}${reset} "
+    printf "%b\n" "${text_padding:+\\e[${text_padding}C}${zws}${string}${reset} "
 
     # Calculate info height.
     ((++info_height))
@@ -3309,7 +3232,7 @@ prin() {
 get_underline() {
     if [[ "$underline_enabled" == "on" ]]; then
         printf -v underline "%${length}s"
-        printf "%b%b\n" "${text_padding:+\e[${text_padding}C}${zws}${underline_color}" \
+        printf "%b%b\n" "${text_padding:+\\e[${text_padding}C}${zws}${underline_color}" \
                         "${underline// /$underline_char}${reset} "
         unset -v length
     fi
@@ -3330,21 +3253,30 @@ get_line_break() {
 
 get_bold() {
     case "$ascii_bold" in
-        "on") ascii_bold="\e[1m" ;;
+        "on") ascii_bold="\\e[1m" ;;
         "off") ascii_bold="" ;;
     esac
 
     case "$bold" in
-        "on") bold="\e[1m" ;;
+        "on") bold="\\e[1m" ;;
         "off") bold="" ;;
     esac
 }
 
 trim() {
+    # When a string is passed to "echo" all trailing and leading
+    # whitespace is removed and inside the string multiple spaces are
+    # condensed into single spaces.
+    #
+    # The "set -f/+f" is here so that "echo" doesn't cause any expansion
+    # of special characters.
+    #
+    # The whitespace trim doesn't work with multiline strings so we use
+    # "${1//[[:space:]]/ }" to remove newlines before we trim the whitespace.
+
     set -f
-    # shellcheck disable=2048,2086
-    set -- $*
-    printf "%s\\n" "${*//[[:space:]]/ }"
+    # shellcheck disable=2086
+    builtin echo -E ${1//[[:space:]]/ }
     set +f
 }
 
@@ -3355,10 +3287,10 @@ trim_quotes() {
 }
 
 strip_sequences() {
-    strip="${1//$'\e['3[0-9]m}"
-    strip="${strip//$'\e['38\;5\;[0-9]m}"
-    strip="${strip//$'\e['38\;5\;[0-9][0-9]m}"
-    strip="${strip//$'\e['38\;5\;[0-9][0-9][0-9]m}"
+    strip="${1//$'\\e['3[0-9]m}"
+    strip="${strip//$'\\e['38\;5\;[0-9]m}"
+    strip="${strip//$'\\e['38\;5\;[0-9][0-9]m}"
+    strip="${strip//$'\\e['38\;5\;[0-9][0-9][0-9]m}"
 
     printf "%s\n" "$strip"
 }
@@ -3580,16 +3512,6 @@ get_distro_colors() {
             ascii_file="dracos"
         ;;
 
-        "dragonfly_old"*)
-            set_colors 1 7 3
-            ascii_file="dragonflybsd_old"
-        ;;
-
-        "dragonfly_small"*)
-            set_colors 1 7 3
-            ascii_file="dragonflybsd_small"
-        ;;
-
         "DragonFly"*)
             set_colors 1 7 3
             ascii_file="dragonflybsd"
@@ -3684,11 +3606,6 @@ get_distro_colors() {
         "Haiku"*)
             set_colors 2 8
             ascii_file="haiku"
-        ;;
-
-        "Hyperbola"*)
-            set_colors 8
-            ascii_file="hyperbola"
         ;;
 
         "Kali"*)
@@ -4036,11 +3953,6 @@ get_distro_colors() {
             ascii_file="solaris"
         ;;
 
-        "openSUSE Tumbleweed"*)
-            set_colors 2 7
-            ascii_file="tumbleweed"
-        ;;
-
         "openSUSE"* | "open SUSE"* | "SUSE"*)
             set_colors 2 7
             ascii_file="suse"
@@ -4217,9 +4129,9 @@ set_text_colors() {
 
 color() {
     case "$1" in
-        [0-6]) printf "%b" "${reset}\e[3${1}m" ;;
-        7 | "fg") printf "%b" "\e[37m${reset}" ;;
-        *) printf "%b" "\e[38;5;${1}m" ;;
+        [0-6]) printf "%b" "${reset}\\e[3${1}m" ;;
+        7 | "fg") printf "%b" "\\e[37m${reset}" ;;
+        *) printf "%b" "\\e[38;5;${1}m" ;;
     esac
 }
 
@@ -4242,7 +4154,7 @@ stdout() {
 }
 
 err() {
-    err+="$(color 1)[!]\e[0m $1\n"
+    err+="$(color 1)[!]\\e[0m $1\n"
 }
 
 get_full_path() {
@@ -4426,7 +4338,7 @@ dynamic_prompt() {
     if ((lines > 1)); then
         case "$kernel_name" in
             "OpenBSD") tput cud "$lines" ;;
-            *) printf "%b" "\e[${lines}B" ;;
+            *) printf "%b" "\\e[${lines}B" ;;
         esac
     fi
 }
@@ -4515,7 +4427,7 @@ old_options() {
 cache_uname() {
     # Cache the output of uname so we don't
     # have to spawn it multiple times.
-    IFS=" " read -ra uname <<< "$(uname -sr)"
+    uname=($(uname -sr))
 
     kernel_name="${uname[0]}"
     kernel_version="${uname[1]}"
@@ -4715,8 +4627,6 @@ INFO:
 
     --ip_host url               URL to query for public IP
     --song_shorthand on/off     Print the Artist/Title on separate lines
-    --music_player player-name  Manually specify a player to use.
-                                Available values are listed in the config file
     --install_time on/off       Enable/Disable showing the time in Install Date output.
     --install_time_format 12h/24h
                                 Set time format in Install Date to be 12 hour or 24 hour.
@@ -4762,7 +4672,7 @@ IMAGE BACKEND:
     --catimg source             Shortcut to use 'catimg' backend.
     --iterm2 source             Shortcut to use 'iterm2' backend.
     --jp2a source               Shortcut to use 'jp2a' backend.
-    --pixterm source            Shortcut to use 'pixterm' backend.
+    --pixterm source               Shortcut to use 'pixterm' backend.
     --sixel source              Shortcut to use 'sixel' backend.
     --termpix source            Shortcut to use 'termpix' backend.
     --tycat source              Shortcut to use 'tycat' backend.
@@ -4845,6 +4755,37 @@ Report bugs to https://github.com/dylanaraps/neofetch/issues
 exit 1
 }
 
+version() { printf "%s" "\
+Neofetch $version
+
+Copyright (c) 2016-2017 Dylan Araps
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the 'Software'), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED 'AS IS', WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+Written by Dylan Araps with help from the following people:
+
+https://github.com/dylanaraps/neofetch/contributors
+
+"
+exit 1
+}
+
 get_args() {
     # Check the commandline flags early for '--config'.
     [[ "$*" != *--config* ]] && get_user_config
@@ -4871,7 +4812,6 @@ get_args() {
             "--shell_version") shell_version="$2" ;;
             "--ip_host") public_ip_host="$2" ;;
             "--song_shorthand") song_shorthand="$2" ;;
-            "--music_player") music_player="$2" ;;
             "--install_time") install_time="$2" ;;
             "--install_time_format") install_time_format="$2" ;;
             "--cpu_temp")
@@ -4886,7 +4826,7 @@ get_args() {
                     case "$arg" in
                         "--disk_show") ;;
                         "-"*) break ;;
-                        *) disk_show+=("$arg") ;;
+                        *) disk_show+=($arg)
                     esac
                 done
             ;;
@@ -4910,7 +4850,7 @@ get_args() {
                 for arg in "$2" "$3" "$4" "$5" "$6" "$7"; do
                     case "$arg" in
                         "-"*) break ;;
-                        *) colors+=("$arg") ;;
+                        *) colors+=($arg)
                     esac
                 done
                 colors+=(7 7 7 7 7 7)
@@ -4978,7 +4918,7 @@ get_args() {
                 for arg in "$2" "$3" "$4" "$5" "$6" "$7"; do
                     case "$arg" in
                         "-"*) break ;;
-                        *) ascii_colors+=("$arg")
+                        *) ascii_colors+=($arg)
                     esac
                 done
                 ascii_colors+=(7 7 7 7 7 7)
@@ -5022,10 +4962,7 @@ get_args() {
             "-v") verbose="on" ;;
             "-vv") set -x; verbose="on" ;;
             "--help") usage ;;
-            "--version")
-                printf "%s\\n" "Neofetch $version"
-                exit 1
-            ;;
+            "--version") version ;;
             "--gen-man")
                 help2man -n "A fast, highly customizable system info script" \
                           -N ./neofetch -o neofetch.1
@@ -5051,10 +4988,10 @@ main() {
     # Minix doesn't support these sequences.
     if [[ "$TERM" != "minix" && "$stdout" != "on" ]]; then
         # If the script exits for any reason, unhide the cursor.
-        trap 'printf "\e[?25h\e[?7h"' EXIT
+        trap 'printf "\\e[?25h\\e[?7h"' EXIT
 
         # Hide the cursor and disable line wrap.
-        printf "\e[?25l\e[?7l"
+        printf "\\e[?25l\\e[?7l"
     fi
 
     image_backend
