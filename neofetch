@@ -2493,28 +2493,28 @@ get_cols() {
         end="${block_range[1]}"
 
         # Generate the string.
-        blocks+="${reset}\\e[3${start}m\\e[4${bcolor0}m${block_width}" 
+        blocks+="${reset}\\e[3${start}m\\e[48;5;${bcolor0}m${block_width}"
         blocks2+="\\e[38;5;${start}m\\e[48;5;${bcolor8}m${block_width}" 
 
-        blocks+="${reset}\\e[3${start}m\\e[4${bcolor1}m${block_width}" 
+        blocks+="${reset}\\e[3${start}m\\e[48;5;${bcolor1}m${block_width}"
         blocks2+="\\e[38;5;${start}m\\e[48;5;${bcolor9}m${block_width}" 
 
-        blocks+="${reset}\\e[3${start}m\\e[4${bcolor2}m${block_width}" 
+        blocks+="${reset}\\e[3${start}m\\e[48;5;${bcolor2}m${block_width}"
         blocks2+="\\e[38;5;${start}m\\e[48;5;${bcolor10}m${block_width}" 
 
-        blocks+="${reset}\\e[3${start}m\\e[4${bcolor3}m${block_width}" 
+        blocks+="${reset}\\e[3${start}m\\e[48;5;${bcolor3}m${block_width}"
         blocks2+="\\e[38;5;${start}m\\e[48;5;${bcolor11}m${block_width}" 
 
-        blocks+="${reset}\\e[3${start}m\\e[4${bcolor4}m${block_width}" 
+        blocks+="${reset}\\e[3${start}m\\e[48;5;${bcolor4}m${block_width}"
         blocks2+="\\e[38;5;${start}m\\e[48;5;${bcolor12}m${block_width}" 
 
-        blocks+="${reset}\\e[3${start}m\\e[4${bcolor5}m${block_width}" 
+        blocks+="${reset}\\e[3${start}m\\e[48;5;${bcolor5}m${block_width}"
         blocks2+="\\e[38;5;${start}m\\e[48;5;${bcolor13}m${block_width}" 
 
-        blocks+="${reset}\\e[3${start}m\\e[4${bcolor6}m${block_width}" 
+        blocks+="${reset}\\e[3${start}m\\e[48;5;${bcolor6}m${block_width}"
         blocks2+="\\e[38;5;${start}m\\e[48;5;${bcolor14}m${block_width}" 
 
-        blocks+="${reset}\\e[3${start}m\\e[4${bcolor7}m${block_width}" 
+        blocks+="${reset}\\e[3${start}m\\e[48;5;${bcolor7}m${block_width}"
         blocks2+="\\e[38;5;${start}m\\e[48;5;${bcolor15}m${block_width}" 
 
         # Convert height into spaces.
